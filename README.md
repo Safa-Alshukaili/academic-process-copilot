@@ -1,5 +1,7 @@
 # Academic Process Copilot
 
+**[Try the live demo](https://claude.ai/artifact/RoG7a6vctw8WuAG4gDL1g6)** — runs the same retrieval, structured-prompt and QA logic in the browser, no setup required.
+
 An AI-assisted institutional process assistant: a student (or advisor) asks
 a question about a university procedure, and a structured-prompting agent
 answers from a verified database, guides them through the required steps
