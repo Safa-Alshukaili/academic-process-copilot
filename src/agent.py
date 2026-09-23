@@ -6,6 +6,8 @@ sys.path.append(os.path.dirname(__file__))
 from db import find_process_by_keyword, get_process_steps, get_forms
 from prompts.templates import build_process_guidance_prompt
 from security import strip_prompt_injection
+from qa_review import review_process_guidance
+from audit_log import log_interaction
 
 STOPWORDS = {
     "how", "many", "what", "when", "where", "does", "do", "the", "for",
@@ -133,6 +135,14 @@ def answer_question(question, role="student", language="English"):
     prompt = build_process_guidance_prompt(question, role, context, language)
 
     llm_answer = _call_llm(prompt)
-    if llm_answer is not None:
-        return llm_answer, prompt
-    return _offline_fallback(processes, faqs, role), prompt
+    answer = llm_answer if llm_answer is not None else _offline_fallback(processes, faqs, role)
+
+    qa = review_process_guidance(answer, context)
+    log_interaction(
+        question=question,
+        process_ids=[p["id"] for p in processes],
+        faq_ids=[f["id"] for f in faqs],
+        qa_passed=qa.passed,
+        qa_notes=qa.notes,
+    )
+    return answer, prompt

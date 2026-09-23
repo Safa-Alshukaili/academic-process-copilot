@@ -52,6 +52,16 @@ CREATE TABLE IF NOT EXISTS faqs (
     last_verified_date TEXT NOT NULL,
     verified_by TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    question TEXT NOT NULL,
+    matched_process_ids TEXT,
+    matched_faq_ids TEXT,
+    qa_passed INTEGER NOT NULL,
+    qa_notes TEXT
+);
 """
 
 SEED = """
@@ -87,7 +97,6 @@ INSERT INTO forms (process_id, form_name, form_location) VALUES
  (1, 'OJT Application Form', 'Student Portal > Forms > OJT Application'),
  (2, 'Course Withdrawal Form', 'Student Portal > Forms > Course Withdrawal'),
  (3, 'Graduation Clearance Form', 'Student Portal > Forms > Graduation Clearance');
-
 INSERT INTO faqs (process_id, question, answer, last_verified_date, verified_by) VALUES
  (1, 'How many credit hours do I need before applying for OJT?',
      'You need at least 120 completed credit hours before submitting an OJT application.',

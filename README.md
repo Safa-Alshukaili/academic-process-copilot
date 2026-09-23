@@ -21,15 +21,21 @@ implemented, so nothing has to be taken on faith.
 ## Quick start
 
 ```bash
-pip install -r requirements.txt   # optional — stdlib-only for the offline demo
+pip install -r requirements.txt   # fastapi/uvicorn for the API; stdlib-only for the CLI demo
 python data/seed.py               # builds data/institutional_processes.db
-python demo/demo.py               # runs both flows end to end
+python demo/demo.py               # runs both flows end to end (CLI)
 python demo/test_qa_review.py     # QA layer tests, including failure cases
+uvicorn src.api:app --reload      # runs the API — open http://127.0.0.1:8000/docs
 ```
+
+Or with Docker: `docker build -t apc . && docker run -p 8000:8000 apc`
 
 Runs fully offline by default (no API key needed) using a deterministic
 template fallback — set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`
 to route through a real model instead; see `src/agent.py::_call_llm`.
+
+Every push to `main` runs the test suite automatically via GitHub Actions
+(`.github/workflows/tests.yml`).
 
 ## Requirement → implementation map
 
@@ -41,7 +47,7 @@ to route through a real model instead; see `src/agent.py::_call_llm`.
 | Build and maintain databases and repositories covering institutional stakeholders and academic operations | `data/seed.py` (schema + seed), `src/db.py` |
 | Design AI-assisted workflows and agents that reduce repetitive administrative work and guide users through forms and institutional processes | `src/agent.py::answer_question()`, Demo 1 in `demo/demo.py` |
 | Work with academic and administrative staff to identify where AI and digital tools can improve existing processes | `docs/PROCESS_IMPROVEMENT_ANALYSIS.md` |
-| Provide technical support for implementing and improving AI-enabled institutional solutions | "Running this yourself" section below + `docs/RESPONSIBLE_AI_AND_SECURITY.md` "what a real deployment would add" |
+| Provide technical support for implementing and improving AI-enabled institutional solutions | `src/api.py` (deployable FastAPI service, auto-generated docs at `/docs`), `Dockerfile`, `.github/workflows/tests.yml` (CI) |
 | Demonstrated use of generative AI tools in a professional/academic setting | Whole project; pluggable LLM call in `src/agent.py::_call_llm` |
 | Sound understanding of structured prompting for information processing and workflow support | `src/prompts/templates.py` — fixed role, verified context, explicit output format and guardrails, not a free-form instruction |
 | Strong digital literacy across databases, spreadsheets and online platforms | SQLite schema design (`data/seed.py`), CLI tooling |
@@ -50,7 +56,7 @@ to route through a real model instead; see `src/agent.py::_call_llm`.
 | Database design and data management | `data/seed.py` schema (5 normalized tables, foreign keys, seed data) |
 | University, educational environment | Domain of the whole project |
 | Quality assurance and structured documentation processes | `docs/QA_PROCESS.md`, `src/qa_review.py`, tests in `demo/test_qa_review.py` |
-| Data protection, information security and responsible AI use | `docs/RESPONSIBLE_AI_AND_SECURITY.md`, `src/security.py` |
+| Data protection, information security and responsible AI use | `docs/RESPONSIBLE_AI_AND_SECURITY.md`, `src/security.py`, `src/audit_log.py` (logs question + QA outcome only — never the generated answer or any PII) |
 
 ## Architecture
 
@@ -64,6 +70,12 @@ src/agent.py          → process-guidance flow: retrieve → build prompt →
 src/materials.py      → material drafting/refinement flow, same pattern
 src/qa_review.py      → automated QA checks (does NOT auto-approve)
 src/security.py       → prompt-injection stripping, PII redaction, RBAC stub
+src/audit_log.py      → logs every question + match + QA outcome (no PII, no answer text)
+src/freshness_check.py→ flags FAQ rows not re-verified within 180 days
+src/api.py            → FastAPI service (POST /ask, POST /materials/draft,
+                        GET /health, GET /admin/freshness) — auto-documented at /docs
+Dockerfile             → containerized deployment
+.github/workflows/     → CI: runs the full test suite on every push
 demo/demo.py          → runs both flows, prints every stage (nothing hidden)
 demo/test_qa_review.py→ QA tests, including cases that should FAIL
 docs/                 → QA process, responsible-AI/security policy,
@@ -86,7 +98,11 @@ the institution's preferred stack.
 
 - Retrieval is keyword-based, not semantic (embeddings) — sufficient for a
   small, well-structured process database; would need reworking at scale.
-- No admin UI yet — data is seeded via script, not edited through a form.
+- No admin UI yet — data is edited via script, not a form; `GET
+  /admin/freshness` surfaces what needs re-verification, but re-verifying
+  is still a manual step.
 - Offline fallback mode formats retrieved rows directly rather than
   generating natural free text; that trade-off is intentional (predictable,
   auditable output) but worth knowing about.
+- The API has no authentication layer — `src/security.py::check_access` is
+  a stub; a real deployment would sit it behind the institution's SSO.

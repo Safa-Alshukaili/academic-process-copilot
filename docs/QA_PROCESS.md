@@ -17,8 +17,10 @@ AI-assisted output this system produces. The automated checks in
 4. **Escalation**: if the automated check fails, or no matching context is
    found, the agent tells the student to contact the responsible office
    directly rather than guessing.
-5. **Freshness**: any FAQ/process row not re-verified within 6 months is
-   flagged in the admin view (not yet implemented — see README "Next steps").
+5. **Freshness**: `src/freshness_check.py` (also exposed at `GET
+   /admin/freshness`) flags any FAQ/process row not re-verified within 180
+   days. Re-verifying the flagged content is still a manual step for a
+   named staff member — the check only surfaces what needs attention.
 
 ## 2. Academic material drafting/refinement
 

@@ -1,3 +1,6 @@
-# Core: no dependencies required to run the offline demo (sqlite3 is stdlib).
+# Core CLI demo: no dependencies required (sqlite3 is stdlib).
+# API layer (src/api.py):
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
 # Optional, only needed if you set LLM_PROVIDER=anthropic:
 anthropic>=0.34.0

@@ -36,10 +36,18 @@
   same output contract, so the system fails safely rather than silently
   degrading to free-form generation.
 
+## Audit logging
+
+`src/audit_log.py` logs every question the agent answers — the question
+text, which processes/FAQs matched, and whether the answer passed QA. It
+never stores the generated answer text or any user-identifying
+information, so the log itself needs no separate protection. `GET /health`
+surfaces a rolling QA failure rate from this log as an early-warning
+signal for missing data coverage.
+
 ## What a real institutional deployment would add
 
 This is a portfolio-scale project. A production version would add:
-audit logging of every question/answer pair, a freshness-review workflow
-for stale FAQ rows, integration with the institution's SSO for access
-control, and a formal data protection impact assessment before storing
-any personal data.
+integration with the institution's SSO for access control, a formal data
+protection impact assessment before storing any personal data, and
+retention/deletion policies for the audit log itself.
