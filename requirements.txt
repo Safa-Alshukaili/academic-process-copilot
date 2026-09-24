@@ -1,4 +1,5 @@
-# Core CLI demo: no dependencies required (sqlite3 is stdlib).
+# Core retrieval (src/retrieval.py, used by the CLI demo and the API alike):
+rank_bm25>=0.2.2
 # API layer (src/api.py):
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from agent import answer_question
 from materials import draft_and_review
 from freshness_check import check as freshness_check
-from audit_log import failure_rate
+from audit_log import failure_rate, unanswered_questions, kpi_summary
 
 app = FastAPI(
     title="Academic Process Copilot API",
@@ -36,6 +36,7 @@ class QuestionRequest(BaseModel):
 class QuestionResponse(BaseModel):
     answer: str
     prompt_used: str
+    qa_passed: bool
 
 
 class MaterialRequest(BaseModel):
@@ -60,8 +61,8 @@ def health():
 def ask(req: QuestionRequest):
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="question must not be empty")
-    answer, prompt = answer_question(req.question, role=req.role)
-    return {"answer": answer, "prompt_used": prompt}
+    answer, prompt, qa_passed = answer_question(req.question, role=req.role)
+    return {"answer": answer, "prompt_used": prompt, "qa_passed": qa_passed}
 
 
 @app.post("/materials/draft", response_model=MaterialResponse)
@@ -79,3 +80,24 @@ def freshness():
     docs/QA_PROCESS.md; the sign-off itself still has to be a human."""
     stale = freshness_check()
     return {"stale_count": len(stale), "rows": stale}
+
+
+@app.get("/admin/unanswered")
+def unanswered():
+    """The staff work queue: questions the agent could not answer,
+    grouped by how often they were asked. This is what n8n's
+    'Notify Staff' node should alert on (see automation/README.md) and
+    what add_faq.py closes — see 'Closing the loop' in the main README."""
+    rows = unanswered_questions()
+    return {"count": len(rows), "questions": rows}
+
+
+@app.get("/admin/kpi")
+def kpi():
+    """One aggregated system-health view: total questions handled, the
+    recent QA pass rate, the top unanswered gaps, how many FAQ rows are
+    stale, and current coverage (FAQ/process counts). Pulls together
+    signals that otherwise live behind three separate endpoints — the
+    view an IT Support/Technician role would actually check day to day,
+    not just the raw building blocks."""
+    return kpi_summary()

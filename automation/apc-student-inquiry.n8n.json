@@ -1,0 +1,136 @@
+{
+  "name": "APC Student Inquiry Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "student-inquiry",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1a1a1a1a-0001-4000-8000-000000000001",
+      "name": "Webhook: New Inquiry",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-200, 300],
+      "webhookId": "student-inquiry-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/ask",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"question\": $json.body.question, \"role\": $json.body.role || \"student\" } }}",
+        "options": {}
+      },
+      "id": "1a1a1a1a-0002-4000-8000-000000000002",
+      "name": "Ask Academic Process Copilot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [40, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-qa-passed",
+              "leftValue": "={{ $json.qa_passed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1a1a1a1a-0003-4000-8000-000000000003",
+      "name": "QA Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [280, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"answered\", \"answer\": $json.answer } }}",
+        "options": {}
+      },
+      "id": "1a1a1a1a-0004-4000-8000-000000000004",
+      "name": "Respond: Answered",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [520, 180]
+    },
+    {
+      "parameters": {
+        "notesInFlow": true,
+        "notes": "Left as a No-Op deliberately, not just for import safety: wiring a real email/Slack send here means one notification per failed question, which gets noisy fast if the same gap is asked several times a day. Recommended instead: leave this empty and use apc-daily-digest.n8n.json, which batches unanswered questions into one digest per day via GET /admin/unanswered. Only wire this node directly if you specifically want a per-question real-time alert despite that trade-off."
+      },
+      "id": "1a1a1a1a-0005-4000-8000-000000000005",
+      "name": "Notify Staff (connect Email/Slack here)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [520, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"escalated\", \"message\": \"This question could not be answered from verified data and has been forwarded to staff for review.\" } }}",
+        "options": {}
+      },
+      "id": "1a1a1a1a-0006-4000-8000-000000000006",
+      "name": "Respond: Escalated",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [760, 420]
+    }
+  ],
+  "connections": {
+    "Webhook: New Inquiry": {
+      "main": [
+        [
+          { "node": "Ask Academic Process Copilot", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Ask Academic Process Copilot": {
+      "main": [
+        [
+          { "node": "QA Passed?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "QA Passed?": {
+      "main": [
+        [
+          { "node": "Respond: Answered", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Notify Staff (connect Email/Slack here)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Notify Staff (connect Email/Slack here)": {
+      "main": [
+        [
+          { "node": "Respond: Escalated", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

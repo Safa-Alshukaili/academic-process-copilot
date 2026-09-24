@@ -3,17 +3,12 @@ import sys
 
 sys.path.append(os.path.dirname(__file__))
 
-from db import find_process_by_keyword, get_process_steps, get_forms
+from db import get_process_steps, get_forms
+from retrieval import retrieve
 from prompts.templates import build_process_guidance_prompt
 from security import strip_prompt_injection
 from qa_review import review_process_guidance
 from audit_log import log_interaction
-
-STOPWORDS = {
-    "how", "many", "what", "when", "where", "does", "do", "the", "for",
-    "before", "applying", "apply", "need", "with", "from", "have", "this",
-    "that", "your", "you", "can", "will", "into", "after", "about",
-}
 
 
 def _format_context(processes, faqs):
@@ -88,42 +83,28 @@ def _offline_fallback(processes, faqs, role):
             for f in forms:
                 out.append(f"  - {f['form_name']}: {f['form_location']}")
         out.append(f"\nVerify with: {p['responsible_office']}")
+    elif faqs:
+        # FAQ with no linked process (e.g. one added via add_faq.py without
+        # a process_id) — still owe the user a verify line, sourced from
+        # who verified the FAQ rather than a process office.
+        out.append(f"\nVerify with: {faqs[0]['verified_by']}")
     return "\n".join(out)
 
 
 def answer_question(question, role="student", language="English"):
-    """Main entry point: retrieve verified context, build the structured
-    prompt, call the LLM if configured, else fall back to a deterministic
-    templated answer. Returns (answer_text, prompt_used) so the prompt is
-    always inspectable — important for review/audit."""
-    keywords = [
-        w.strip("?.,!").lower() for w in question.split()
-        if len(w) > 3 and w.strip("?.,!").lower() not in STOPWORDS
-    ]
+    """Main entry point: retrieve verified context via BM25 (src/retrieval.py),
+    build the structured prompt, call the LLM if configured, else fall
+    back to a deterministic templated answer. Returns
+    (answer_text, prompt_used, qa_passed) so both the prompt and the
+    grounding verdict are always inspectable — important for review/audit.
 
-    # score every candidate row by how many distinct query keywords it
-    # contains, then keep only the highest-scoring rows — this avoids
-    # pulling in every loosely related process for a specific question.
-    proc_scores, faq_scores, proc_by_id, faq_by_id = {}, {}, {}, {}
-    for word in keywords:
-        p, f = find_process_by_keyword(word)
-        for row in p:
-            proc_by_id[row["id"]] = row
-            proc_scores[row["id"]] = proc_scores.get(row["id"], 0) + 1
-        for row in f:
-            faq_by_id[row["id"]] = row
-            faq_scores[row["id"]] = faq_scores.get(row["id"], 0) + 1
+    Only the single top-ranked FAQ is kept for the offline fallback (which
+    only ever reads faqs[0]) — returning several ranked-but-unused FAQs
+    was pure noise with no effect on the answer."""
+    processes, faqs = retrieve(question)
+    faqs = faqs[:1]
 
-    def top_only(scores, by_id):
-        if not scores:
-            return []
-        best = max(scores.values())
-        return [by_id[i] for i, s in scores.items() if s == best]
-
-    processes = top_only(proc_scores, proc_by_id)
-    faqs = top_only(faq_scores, faq_by_id)
-
-    # if a FAQ pins down a specific process, prefer that process alone
+    # if the FAQ pins down a specific process, prefer that process alone
     # over other loosely-matched ones — the FAQ is the more precise signal
     faq_process_ids = {f["process_id"] for f in faqs if f.get("process_id")}
     if faq_process_ids:
@@ -145,4 +126,4 @@ def answer_question(question, role="student", language="English"):
         qa_passed=qa.passed,
         qa_notes=qa.notes,
     )
-    return answer, prompt
+    return answer, prompt, qa.passed

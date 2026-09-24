@@ -16,8 +16,22 @@ AI-assisted output this system produces. The automated checks in
    passing automated check is sufficient for direct answers to students.
 4. **Escalation**: if the automated check fails, or no matching context is
    found, the agent tells the student to contact the responsible office
-   directly rather than guessing.
-5. **Freshness**: `src/freshness_check.py` (also exposed at `GET
+   directly rather than guessing. Every escalation is logged (`src/audit_log.py`)
+   with the exact question text.
+5. **Closing the loop**: `GET /admin/unanswered` groups logged failures by
+   question, most-asked first — this is the staff work queue, not a log
+   dump. A staff member reviews the top of that queue, confirms the correct
+   answer against the real source, and runs `src/add_faq.py` to publish it
+   as a new verified FAQ. This does **not** re-run `data/seed.py` — seeding
+   wipes and rebuilds the whole database, including audit history, so it's
+   for initial setup only, never for adding one answer. The next student
+   who asks the same (or similarly worded) question gets it automatically;
+   the old failed attempts stay in the audit log as a record that the gap
+   existed and was closed, not because the questions need re-answering.
+   In the `automation/` n8n workflow, the "Notify Staff" node is where a
+   real deployment would push this alert immediately (e.g. an email per
+   escalation) instead of relying on staff to poll `/admin/unanswered`.
+6. **Freshness**: `src/freshness_check.py` (also exposed at `GET
    /admin/freshness`) flags any FAQ/process row not re-verified within 180
    days. Re-verifying the flagged content is still a manual step for a
    named staff member — the check only surfaces what needs attention.

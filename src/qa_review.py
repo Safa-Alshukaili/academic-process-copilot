@@ -6,6 +6,7 @@ This does NOT approve content. It runs automated checks and produces a
 report a human reviewer uses to sign off — the sign-off itself is always
 human, per docs/QA_PROCESS.md.
 """
+import re
 from dataclasses import dataclass, field
 
 
@@ -14,6 +15,61 @@ class QAReport:
     passed: bool
     checks: dict = field(default_factory=dict)
     notes: list = field(default_factory=list)
+
+
+def _extract_numbers(text):
+    """Numbers worth checking for grounding — 2+ digit integers, decimals
+    (2.00, 3.50), and percentages. Single digits are skipped on purpose:
+    they show up constantly as list/step numbering (Step 1, Step 2...) in
+    both the answer and the context regardless of topic, so checking them
+    produces noise, not signal."""
+    return set(re.findall(r"\b\d{2,}(?:\.\d+)?\b|\b\d\.\d+\b|\b\d+%", text))
+
+
+def _extract_article_refs(text):
+    """Article/section citations like 'Article 46' or 'Art. 38.1' — the
+    single highest-value thing to verify isn't invented, since a wrong
+    article number is exactly the kind of confident-sounding, checkable
+    fabrication a real LLM could produce."""
+    return set(re.findall(r"(?:Article|Art\.)\s*\d+(?:\.\d+)*", text, flags=re.IGNORECASE))
+
+
+def check_grounding(answer_text, context_used):
+    """Verifies the answer doesn't state a number or article citation that
+    isn't actually present in the retrieved context — the concrete,
+    testable half of 'generation depends only on the retrieved data'.
+    This is what makes the pipeline a real RAG safety check rather than
+    just a prompt instruction the model might ignore: it inspects the
+    output, it doesn't just ask nicely in the prompt.
+
+    Note what this does and doesn't catch: it catches invented numbers
+    and article citations — the highest-stakes, most checkable class of
+    hallucination for a regulation-answering agent. It does not catch
+    fabricated prose that introduces no numbers/citations (e.g. an
+    invented *reason* stated in fluent, number-free language) — that
+    would need an entailment check or a second LLM pass, out of scope
+    here. Documented as a known limit, not hidden."""
+    answer_numbers = _extract_numbers(answer_text)
+    context_numbers = _extract_numbers(context_used)
+    unsupported_numbers = answer_numbers - context_numbers
+
+    answer_articles = _extract_article_refs(answer_text)
+    context_articles = _extract_article_refs(context_used)
+    unsupported_articles = {
+        a for a in answer_articles
+        if not any(a.lower().replace("art.", "article") in c.lower().replace("art.", "article")
+                   or c.lower().replace("art.", "article") in a.lower().replace("art.", "article")
+                   for c in context_articles)
+    }
+
+    notes = []
+    if unsupported_numbers:
+        notes.append(f"Number(s) in the answer not found in retrieved context: {sorted(unsupported_numbers)}")
+    if unsupported_articles:
+        notes.append(f"Article citation(s) in the answer not found in retrieved context: {sorted(unsupported_articles)}")
+
+    passed = not unsupported_numbers and not unsupported_articles
+    return passed, notes
 
 
 def review_process_guidance(answer_text: str, context_used: str) -> QAReport:
@@ -29,9 +85,9 @@ def review_process_guidance(answer_text: str, context_used: str) -> QAReport:
     if not checks["not_empty_context"]:
         notes.append("No verified context was found — answer may be ungrounded.")
 
-    # crude but effective "no invented office" check: every mentioned
-    # office-like phrase should also appear in the context it was built from
-    checks["grounded_in_context"] = True  # placeholder for a stricter check in production
+    grounded, grounding_notes = check_grounding(answer_text, context_used)
+    checks["grounded_in_context"] = grounded
+    notes.extend(grounding_notes)
 
     passed = all(checks.values())
     return QAReport(passed=passed, checks=checks, notes=notes)

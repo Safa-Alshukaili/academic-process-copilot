@@ -22,10 +22,10 @@ def line(char="-", n=70):
 def demo_process_guidance():
     print("DEMO 1: Institutional process guidance agent")
     line()
-    question = "How many credit hours do I need before applying for OJT?"
+    question = "How long is the mandatory training course?"
     print(f"Student question: {question}\n")
 
-    answer, prompt = answer_question(question, role="student")
+    answer, prompt, qa_passed = answer_question(question, role="student")
 
     print("Structured prompt sent to the model:")
     line(".")
@@ -33,6 +33,7 @@ def demo_process_guidance():
     line(".")
     print("\nAgent answer:")
     print(answer)
+    print(f"\nQA passed: {qa_passed}")
     print()
 
 

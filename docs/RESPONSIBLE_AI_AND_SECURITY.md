@@ -28,7 +28,12 @@
 - The agent never invents institutional facts: the structured prompt in
   `src/prompts/templates.py` explicitly instructs the model to use only
   the retrieved CONTEXT and to say so if the context is insufficient,
-  rather than guess.
+  rather than guess — and this is checked, not just requested.
+  `src/qa_review.py::check_grounding()` inspects every generated answer
+  for numbers and article citations that don't actually appear in the
+  retrieved context, so an instruction the model ignores still gets
+  caught rather than silently published. See "RAG design" in the main
+  README for what this does and doesn't cover.
 - The agent never asks the user for personal identifying information.
 - No AI-assisted output is published without a human review step — see
   `docs/QA_PROCESS.md`. The AI drafts; a named person approves.
