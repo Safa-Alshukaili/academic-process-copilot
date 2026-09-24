@@ -26,5 +26,7 @@ jobs:
         run: python demo/test_add_faq.py
       - name: Run KPI test
         run: python demo/test_kpi.py
+      - name: Run bilingual tests
+        run: python demo/test_bilingual.py
       - name: Run agent smoke test
         run: python demo/demo.py

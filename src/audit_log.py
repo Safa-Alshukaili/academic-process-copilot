@@ -17,11 +17,11 @@ sys.path.append(os.path.dirname(__file__))
 from db import get_conn
 
 
-def log_interaction(question, process_ids, faq_ids, qa_passed, qa_notes):
+def log_interaction(question, process_ids, faq_ids, qa_passed, qa_notes, language=None):
     conn = get_conn()
     conn.execute(
         "INSERT INTO audit_log (timestamp, question, matched_process_ids, "
-        "matched_faq_ids, qa_passed, qa_notes) VALUES (?, ?, ?, ?, ?, ?)",
+        "matched_faq_ids, qa_passed, qa_notes, language) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
             datetime.datetime.utcnow().isoformat(),
             question,
@@ -29,6 +29,7 @@ def log_interaction(question, process_ids, faq_ids, qa_passed, qa_notes):
             ",".join(str(i) for i in faq_ids),
             1 if qa_passed else 0,
             "; ".join(qa_notes),
+            language,
         ),
     )
     conn.commit()

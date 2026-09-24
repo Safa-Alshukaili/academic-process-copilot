@@ -27,11 +27,14 @@ def _extract_numbers(text):
 
 
 def _extract_article_refs(text):
-    """Article/section citations like 'Article 46' or 'Art. 38.1' — the
-    single highest-value thing to verify isn't invented, since a wrong
-    article number is exactly the kind of confident-sounding, checkable
-    fabrication a real LLM could produce."""
-    return set(re.findall(r"(?:Article|Art\.)\s*\d+(?:\.\d+)*", text, flags=re.IGNORECASE))
+    """Article/section citations — 'Article 46' / 'Art. 38.1' in English,
+    or 'المادة 46' in Arabic — the single highest-value thing to verify
+    isn't invented, since a wrong article number is exactly the kind of
+    confident-sounding, checkable fabrication a real LLM could produce,
+    in either language."""
+    en = re.findall(r"(?:Article|Art\.)\s*\d+(?:\.\d+)*", text, flags=re.IGNORECASE)
+    ar = re.findall(r"المادة\s*\d+(?:\.\d+)*", text)
+    return set(en) | set(ar)
 
 
 def check_grounding(answer_text, context_used):
@@ -72,16 +75,20 @@ def check_grounding(answer_text, context_used):
     return passed, notes
 
 
-def review_process_guidance(answer_text: str, context_used: str) -> QAReport:
-    """Automated checks for an AI-assisted process-guidance answer."""
+def review_process_guidance(answer_text: str, context_used: str, lang: str = "en") -> QAReport:
+    """Automated checks for an AI-assisted process-guidance answer, in
+    either language."""
     checks = {}
     notes = []
 
-    checks["has_verify_line"] = "verify with" in answer_text.lower()
+    verify_marker = "تحقق مع" if lang == "ar" else "verify with"
+    checks["has_verify_line"] = verify_marker in answer_text if lang == "ar" else verify_marker in answer_text.lower()
     if not checks["has_verify_line"]:
-        notes.append("Missing 'Verify with: <office>' line required by the output format.")
+        expected = "'تحقق مع: <الجهة>'" if lang == "ar" else "'Verify with: <office>'"
+        notes.append(f"Missing {expected} line required by the output format.")
 
-    checks["not_empty_context"] = context_used.strip() != "No matching institutional data found."
+    not_found_marker = "No matching institutional data found."
+    checks["not_empty_context"] = context_used.strip() != not_found_marker
     if not checks["not_empty_context"]:
         notes.append("No verified context was found — answer may be ungrounded.")
 

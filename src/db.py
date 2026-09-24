@@ -39,6 +39,22 @@ def find_process_by_keyword(keyword):
     return processes, faqs
 
 
+def get_process(process_id):
+    """Fetches one process by id directly — needed because retrieval can
+    correctly identify (via a matched FAQ's process_id) a process that
+    didn't itself make the top-k candidate list scored by BM25. Without
+    this, the narrowing step in agent.py had a real bug: it could only
+    filter among already-retrieved candidates, so if the right process
+    wasn't among them it silently kept a wrong one instead. Returns None
+    if no such process exists."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM processes WHERE id = ?", (process_id,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_process_steps(process_id):
     conn = get_conn()
     cur = conn.cursor()

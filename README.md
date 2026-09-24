@@ -3,8 +3,9 @@
 **[Try the live demo](https://claude.ai/artifact/RoG7a6vctw8WuAG4gDL1g6)** — runs the same retrieval, structured-prompt and QA logic in the browser, no setup required.
 
 An AI-assisted institutional process assistant: a student (or advisor) asks
-a question about a university procedure, and a structured-prompting agent
-answers from a verified database, guides them through the required steps
+a question about a university procedure — in English **or Arabic** — and a
+structured-prompting agent retrieves and answers in that same language
+from a verified database, guides them through the required steps
 and forms, and refuses to guess when the data doesn't cover the question.
 A second module applies the same structured-prompting + QA pattern to
 drafting and reviewing academic materials.
@@ -32,7 +33,18 @@ pip install -r requirements.txt   # rank_bm25 for retrieval, fastapi/uvicorn for
 python data/seed.py               # builds data/institutional_processes.db
 python demo/demo.py               # runs both flows end to end (CLI)
 python demo/test_qa_review.py     # QA layer tests, including failure cases
+python demo/test_bilingual.py     # Arabic + English retrieval/generation tests
 uvicorn src.api:app --reload      # runs the API — open http://127.0.0.1:8000/docs
+```
+
+Try it in either language via the API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \
+  -d '{"question": "What GPA puts me on academic probation?"}'
+
+curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \
+  -d '{"question": "أي معدل يخليني تحت الملاحظة الأكاديمية؟"}'
 ```
 
 Or with Docker: `docker build -t apc . && docker run -p 8000:8000 apc`
@@ -71,10 +83,14 @@ Every push to `main` runs the test suite automatically via GitHub Actions
 data/seed.py        → builds institutional_processes.db from the real
                        UTAS Academic Regulation (processes, steps, FAQs,
                        each citing a specific article)
-src/db.py            → read layer (get_conn, per-process step/form lookups)
+src/db.py            → read layer (get_conn, per-process step/form lookups,
+                        get_process() for direct id lookups)
 src/retrieval.py      → RAG retrieval: BM25 over FAQs + processes, with a
                         minimum-shared-terms guard against single-rare-
-                        word false positives (see "RAG design" below)
+                        word false positives (see "RAG design" below) —
+                        and language-aware: detect_language() routes each
+                        query to an Arabic- or English-only scored index
+                        (see "Bilingual design" below)
 src/prompts/         → structured prompt templates (the "how" of the AI use)
 src/agent.py          → process-guidance flow: retrieve → build prompt →
                         call LLM (or offline fallback) → verify grounding
@@ -149,6 +165,38 @@ description of one. `apc-student-inquiry.n8n.json` calls this API's
 `apc-daily-digest.n8n.json` batches unanswered questions into one daily
 summary instead of one alert per failure. See `automation/README.md` for
 what each does, how to run them, and why there are two instead of one.
+
+## Bilingual design: Arabic and English, not translation-after-the-fact
+
+A student can ask in either language and gets an answer in that same
+language — but this isn't a translation layer bolted on at the end.
+`src/retrieval.py::detect_language()` checks the question for Arabic
+script and routes it to a BM25 index built **only from that language's**
+text (`question_ar`/`answer_ar` vs `question`/`answer`, etc.) — an Arabic
+question can only match Arabic-scored content, and vice versa. The
+offline fallback and structured prompt then render fully in that
+language: labels included ("تحقق مع" not "Verify with"), not just the
+underlying facts. `src/qa_review.py`'s grounding check was also extended
+to recognize Arabic article citations ("المادة 46") alongside English
+ones, so a hallucinated Arabic answer is caught exactly the same way an
+English one is.
+
+Building this surfaced a real bug, covered by
+`demo/test_bilingual.py::test_process_narrowing_fetches_correct_process_even_if_not_in_candidates`:
+an Arabic query's top-matched FAQ correctly pointed at the right process
+via its `process_id`, but that process hadn't itself scored into the
+initial BM25 candidate list (a different, unrelated process had, on
+coincidental shared terms). The old narrowing logic only filtered
+already-retrieved candidates and silently kept the wrong one when the
+right one wasn't among them — fixed by fetching the FAQ's linked process
+directly by id (`db.py::get_process()`) instead of only filtering.
+
+**What isn't bilingual (yet), stated rather than hidden**: the academic
+material drafting module (`src/materials.py`) and the published
+client-side demo artifact are English-only. `src/add_faq.py` accepts an
+optional Arabic translation for newly-added FAQs — an FAQ added without
+one simply won't surface for Arabic questions until translated, rather
+than showing a blank or English-only answer to an Arabic query.
 
 ## Honest limitations
 
