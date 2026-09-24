@@ -26,26 +26,78 @@ implemented, so nothing has to be taken on faith.
 > legal-text dump. Extend `data/seed.py` with more FAQs (same structure,
 > citing the article number) for anything not yet covered.
 
+## Contents
+
+- [Full project guide](docs/GUIDE.md) — comprehensive walkthrough (setup, usage, every design decision)
+- [Screenshots](#screenshots)
+- [Quick start](#quick-start)
+- [Requirement → implementation map](#requirement--implementation-map)
+- [Architecture](#architecture)
+- [RAG design](#rag-design-why-this-counts-as-grounded-not-just-has-an-llm-call)
+- [No-code automation layer](#no-code-automation-layer)
+- [Bilingual design](#bilingual-design-arabic-and-english-not-translation-after-the-fact)
+- [Honest limitations](#honest-limitations)
+
+## Screenshots
+
+Real output from this project running — not mockups. See `docs/screenshots/`
+for the full-resolution files.
+
+**Automated tests passing** (`demo/test_qa_review.py`), including the case
+designed to fail (a missing checklist item) actually failing:
+
+![QA tests passing](docs/screenshots/01-qa-tests-passing.png)
+
+**The n8n automation layer correctly escalating** a question outside the
+data ("what is the weather today") instead of guessing:
+
+![n8n escalation response](docs/screenshots/02-n8n-escalation-response.png)
+
+**Both n8n flows executed successfully in one run** — student inquiry
+(top) and the unanswered-questions digest (bottom), every node green:
+
+![n8n full workflow success](docs/screenshots/03-n8n-full-workflow-success.png)
+
+**The API's health endpoint**, live:
+
+![API health endpoint](docs/screenshots/04-api-health-endpoint.png)
+
+**n8n workflow 1 (Webhook: student inquiry) — the actual canvas:**
+
+![n8n workflow 1 canvas](docs/screenshots/08-n8n-workflow1-canvas.png)
+
+**n8n workflow 2 (scheduled digest) — the actual canvas:**
+
+![n8n workflow 2 canvas](docs/screenshots/09-n8n-workflow2-canvas.png)
+
+**A correctly answered question**, via the live n8n webhook:
+
+![n8n answered — academic probation](docs/screenshots/05-n8n-answered-gpa-probation.png)
+
+**A correctly escalated question** (outside the data, no guess made):
+
+![n8n escalated — library fee](docs/screenshots/07-n8n-escalation-library-fee.png)
+
 ## Quick start
 
-```bash
+\`\`\`bash
 pip install -r requirements.txt   # rank_bm25 for retrieval, fastapi/uvicorn for the API
 python data/seed.py               # builds data/institutional_processes.db
 python demo/demo.py               # runs both flows end to end (CLI)
 python demo/test_qa_review.py     # QA layer tests, including failure cases
 python demo/test_bilingual.py     # Arabic + English retrieval/generation tests
 uvicorn src.api:app --reload      # runs the API — open http://127.0.0.1:8000/docs
-```
+\`\`\`
 
 Try it in either language via the API:
 
-```bash
-curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \
+\`\`\`bash
+curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \\
   -d '{"question": "What GPA puts me on academic probation?"}'
 
-curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \
+curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \\
   -d '{"question": "أي معدل يخليني تحت الملاحظة الأكاديمية؟"}'
-```
+\`\`\`
 
 Or with Docker: `docker build -t apc . && docker run -p 8000:8000 apc`
 
@@ -79,7 +131,23 @@ Every push to `main` runs the test suite automatically via GitHub Actions
 
 ## Architecture
 
-```
+\`\`\`mermaid
+flowchart LR
+    Student([Student asks a question<br/>English or Arabic]) --> Detect[Detect language<br/>retrieval.py]
+    Detect --> Retrieve[BM25 retrieval<br/>scored in that language only]
+    Retrieve --> Prompt[Build structured prompt<br/>prompts/templates.py]
+    Prompt --> LLM{LLM_PROVIDER set?}
+    LLM -->|yes| RealLLM[Call Claude / Gemini / OpenAI]
+    LLM -->|no| Offline[Deterministic offline<br/>template fallback]
+    RealLLM --> Ground[Grounding check<br/>qa_review.py]
+    Offline --> Ground
+    Ground -->|numbers/citations<br/>all supported| Pass[Answer + Verify-with line]
+    Ground -->|unsupported claim<br/>found| Fail[QA fails — logged,<br/>surfaced as a gap]
+    Pass --> Audit[(audit_log)]
+    Fail --> Audit
+\`\`\`
+
+\`\`\`
 data/seed.py        → builds institutional_processes.db from the real
                        UTAS Academic Regulation (processes, steps, FAQs,
                        each citing a specific article)
@@ -116,7 +184,7 @@ demo/test_qa_review.py→ QA tests, including a simulated hallucination
                         (an invented number/article) that must be caught
 docs/                 → QA process, responsible-AI/security policy,
                         process-improvement analysis
-```
+\`\`\`
 
 ## RAG design: why this counts as "grounded," not just "has an LLM call"
 
@@ -167,6 +235,15 @@ summary instead of one alert per failure. See `automation/README.md` for
 what each does, how to run them, and why there are two instead of one.
 
 ## Bilingual design: Arabic and English, not translation-after-the-fact
+
+\`\`\`mermaid
+flowchart TD
+    Q[Question] --> D{Contains Arabic<br/>script?}
+    D -->|yes| ArIndex[Score against<br/>question_ar / answer_ar only]
+    D -->|no| EnIndex[Score against<br/>question / answer only]
+    ArIndex --> ArAnswer[Render answer in Arabic:<br/>تحقق مع, العملية, الخطوات]
+    EnIndex --> EnAnswer[Render answer in English:<br/>Verify with, Process, Steps]
+\`\`\`
 
 A student can ask in either language and gets an answer in that same
 language — but this isn't a translation layer bolted on at the end.
@@ -219,6 +296,9 @@ than showing a blank or English-only answer to an Arabic query.
   `test_flags_ungrounded_number`), not the first. Fixing the first
   properly needs semantic embeddings or a relevance-confidence gate, not
   a better prompt.
+
+  Screenshot of this exact case happening live, via the n8n workflow:
+  ![n8n — OJT retrieval limitation in action](docs/screenshots/06-n8n-ojt-retrieval-limitation.png)
 - No admin UI yet — data is edited via script, not a form; `GET
   /admin/freshness` surfaces what needs re-verification, but re-verifying
   is still a manual step.
