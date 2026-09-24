@@ -46,37 +46,37 @@ for the full-resolution files.
 **Automated tests passing** (`demo/test_qa_review.py`), including the case
 designed to fail (a missing checklist item) actually failing:
 
-![QA tests passing](docs/screenshots/01-qa-tests-passing.png)
+![QA tests passing](./docs/screenshots/01-qa-tests-passing.png)
 
 **The n8n automation layer correctly escalating** a question outside the
 data ("what is the weather today") instead of guessing:
 
-![n8n escalation response](docs/screenshots/02-n8n-escalation-response.png)
+![n8n escalation response](./docs/screenshots/02-n8n-escalation-response.png)
 
 **Both n8n flows executed successfully in one run** — student inquiry
 (top) and the unanswered-questions digest (bottom), every node green:
 
-![n8n full workflow success](docs/screenshots/03-n8n-full-workflow-success.png)
+![n8n full workflow success](./docs/screenshots/03-n8n-full-workflow-success.png)
 
 **The API's health endpoint**, live:
 
-![API health endpoint](docs/screenshots/04-api-health-endpoint.png)
+![API health endpoint](./docs/screenshots/04-api-health-endpoint.png)
 
 **n8n workflow 1 (Webhook: student inquiry) — the actual canvas:**
 
-![n8n workflow 1 canvas](docs/screenshots/08-n8n-workflow1-canvas.png)
+![n8n workflow 1 canvas](./docs/screenshots/08-n8n-workflow1-canvas.png)
 
 **n8n workflow 2 (scheduled digest) — the actual canvas:**
 
-![n8n workflow 2 canvas](docs/screenshots/09-n8n-workflow2-canvas.png)
+![n8n workflow 2 canvas](./docs/screenshots/09-n8n-workflow2-canvas.png)
 
 **A correctly answered question**, via the live n8n webhook:
 
-![n8n answered — academic probation](docs/screenshots/05-n8n-answered-gpa-probation.png)
+![n8n answered — academic probation](./docs/screenshots/05-n8n-answered-gpa-probation.png)
 
 **A correctly escalated question** (outside the data, no guess made):
 
-![n8n escalated — library fee](docs/screenshots/07-n8n-escalation-library-fee.png)
+![n8n escalated — library fee](./docs/screenshots/07-n8n-escalation-library-fee.png)
 
 ## Quick start
 
