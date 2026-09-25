@@ -10,8 +10,8 @@ Two separate sets, on purpose:
   DEV      -> used while tuning normalization, the synonym table and the
               confidence gate. Scores on this set are optimistic by design.
   HELDOUT  -> written BEFORE any tuning and never edited afterwards. This is
-              the honest number. Both sets were written by the project
-              author, not collected from real students, so even HELDOUT is
+              the honest number. Both sets were written during development,
+                not collected from real students, so even HELDOUT is
               an approximation of real traffic, not a substitute for it.
 """
 

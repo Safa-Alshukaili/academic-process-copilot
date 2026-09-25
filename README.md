@@ -1,5 +1,7 @@
 # Academic Process Copilot
 
+- [Project report (PDF)](docs/Academic_Process_Copilot_Report.pdf) — problem, design, evaluation results, limitations
+
 **[Try the live demo](https://claude.ai/artifact/RoG7a6vctw8WuAG4gDL1g6)** — a standalone in-browser copy, no setup required. It runs an earlier version of the retrieval logic (before the normalization and confidence gate described below), and questions asked there are not logged and never reach the staff email digest — that loop runs through the API (`POST /ask`).
 
 An AI-assisted institutional process assistant: a student (or advisor) asks
@@ -266,8 +268,7 @@ answers a different question. That is what the evaluation below measures.
 ## Evaluation: measured, not claimed
 
 `demo/eval_retrieval.py` runs labeled questions through the same routing
-the API uses. `demo/eval_questions.py` holds two sets written by the
-author: **DEV** (35 in-scope, 9 out-of-scope) was used to tune the
+the API uses. `demo/eval_questions.py` holds two sets was added: **DEV** (35 in-scope, 9 out-of-scope) was used to tune the
 normalization, synonym table and gate; **HELDOUT** (22 in-scope, 12
 out-of-scope) was written before any tuning and never edited, so it is
 the honest number. The same script was run on the code before this
@@ -286,7 +287,7 @@ question is now refused — but DEV was used for tuning, so treat that as
 an upper bound. The two held-out false answers are "هل فيه باص بين
 الفروع؟" (a bus between branches — matched the branch-transfer process
 through "branches") and "How many credit hours do I need to start my
-graduation project?" (matched course-load rules, as before). The sets are small and author-written, so
+graduation project?" (matched course-load rules, as before). The sets are small and was added, so
 these are indicators, not statistically strong results; real student
 questions from `audit_log` are the next evaluation set to build. CI
 fails if a change makes the held-out numbers worse.

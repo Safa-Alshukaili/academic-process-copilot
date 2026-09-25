@@ -372,8 +372,7 @@ published without a human sign-off step — see
 ## 10. Known limitations (stated, not hidden)
 
 - Understanding is lexical plus a curated synonym table, not semantic.
-  On the held-out question set (22 in-scope, 12 out-of-scope, written by
-  the author before tuning): 19/22 answered from exactly the right FAQ,
+  On the held-out question set (22 in-scope, 12 out-of-scope, was added before tuning): 19/22 answered from exactly the right FAQ,
   0/22 from an unrelated topic, 2/22 refused although answerable, and
   2/12 out-of-scope questions answered when they should have been
   refused. The most common error is picking a *sibling* FAQ in the right
