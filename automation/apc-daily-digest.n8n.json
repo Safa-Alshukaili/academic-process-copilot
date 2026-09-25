@@ -3,34 +3,38 @@
   "nodes": [
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "days",
-              "daysInterval": 2,
-              "triggerAtHour": 8,
-              "triggerAtMinute": 0
-            }
-          ]
-        }
+        "httpMethod": "POST",
+        "path": "student-inquiry",
+        "responseMode": "responseNode",
+        "options": {}
       },
-      "id": "2b2b2b2b-0001-4000-8000-000000000001",
-      "name": "Every Day at 8am",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [-200, 300]
+      "id": "4215bc96-3045-4267-afd7-ab3e5c835649",
+      "name": "Webhook: New Inquiry",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        512
+      ],
+      "webhookId": "student-inquiry-webhook"
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "http://127.0.0.1:8000/admin/unanswered",
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/ask",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"question\": $json.body.question, \"role\": $json.body.role || \"student\" } }}",
         "options": {}
       },
-      "id": "2b2b2b2b-0002-4000-8000-000000000002",
-      "name": "Get Unanswered Questions",
+      "id": "c0063ca1-8583-46b9-89f4-793b49c8f17b",
+      "name": "Ask Academic Process Copilot",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [40, 300]
+      "position": [
+        64,
+        560
+      ]
     },
     {
       "parameters": {
@@ -38,7 +42,116 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-qa-passed",
+              "leftValue": "={{ $json.qa_passed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5ca72663-006e-4d18-b9bc-cdf4188f3f8a",
+      "name": "QA Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        304,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"answered\", \"answer\": $json.answer } }}",
+        "options": {}
+      },
+      "id": "565ae9c3-6cf6-4151-b866-232cf60f4573",
+      "name": "Respond: Answered",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        656,
+        544
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c13c6db7-4f41-4bad-b6e9-40e6fb1dfd60",
+      "name": "Notify Staff (connect Email/Slack here)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        544,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"escalated\", \"message\": \"This question could not be answered from verified data and has been forwarded to staff for review.\" } }}",
+        "options": {}
+      },
+      "id": "c741e803-4fa0-46d6-a496-1d9f1acaeeec",
+      "name": "Respond: Escalated",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        992,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "daysInterval": 2,
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "20afcaa6-2b87-4240-9ee1-3609d5aeb75e",
+      "name": "Every Day at 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -288,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:8000/admin/unanswered/grouped",
+        "options": {}
+      },
+      "id": "c1c2ce1f-eb75-4f89-8d53-1b53ce88bae8",
+      "name": "Get Unanswered Questions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -64,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
           },
           "conditions": [
             {
@@ -55,64 +168,173 @@
         },
         "options": {}
       },
-      "id": "2b2b2b2b-0003-4000-8000-000000000003",
+      "id": "dedda956-52ad-4915-8015-acd11e323d84",
       "name": "Any New Gaps?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [280, 300]
+      "position": [
+        112,
+        960
+      ]
     },
     {
-      "parameters": {
-        "notesInFlow": true,
-        "notes": "Placeholder for the real digest send. Wire this to a Gmail, Outlook, or Slack node using your own credentials. Suggested message body (one email per day, not one per question): '{{ $json.count }} unanswered question(s) today, most-asked first: ' + a formatted list from $json.questions (each item has question, times_asked, last_asked). Left as a No-Op so the workflow is importable and runnable without requiring any external account."
-      },
-      "id": "2b2b2b2b-0004-4000-8000-000000000004",
-      "name": "Send Digest (connect Email/Slack here)",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [520, 180]
-    },
-    {
-      "parameters": {
-        "notesInFlow": true,
-        "notes": "No unanswered questions since the last check — nothing to send. This is what keeps the digest quiet on ordinary days instead of emailing 'zero gaps found' every morning."
-      },
-      "id": "2b2b2b2b-0005-4000-8000-000000000005",
+      "parameters": {},
+      "id": "0844358b-361c-438c-9584-eb0c8286478f",
       "name": "Nothing To Report",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [520, 420]
+      "position": [
+        304,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "build_email_body.js"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        896
+      ],
+      "id": "f70fd4a9-53f1-4e73-a25c-bec658488071",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "fromEmail": "mohammedsafa500@gmail.com",
+        "toEmail": "mohammedsafa500@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        592,
+        896
+      ],
+      "id": "0169b752-8c3d-4884-9f65-8c6377a304df",
+      "name": "Send an Email",
+      "webhookId": "186da7cf-1a58-4e37-bb01-3269fb4209c0"
     }
   ],
+  "pinData": {},
   "connections": {
+    "Webhook: New Inquiry": {
+      "main": [
+        [
+          {
+            "node": "Ask Academic Process Copilot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Academic Process Copilot": {
+      "main": [
+        [
+          {
+            "node": "QA Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Passed?": {
+      "main": [
+        [
+          {
+            "node": "Respond: Answered",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Staff (connect Email/Slack here)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Staff (connect Email/Slack here)": {
+      "main": [
+        [
+          {
+            "node": "Respond: Escalated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Every Day at 8am": {
       "main": [
         [
-          { "node": "Get Unanswered Questions", "type": "main", "index": 0 }
+          {
+            "node": "Get Unanswered Questions",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Get Unanswered Questions": {
       "main": [
         [
-          { "node": "Any New Gaps?", "type": "main", "index": 0 }
+          {
+            "node": "Any New Gaps?",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Any New Gaps?": {
       "main": [
         [
-          { "node": "Send Digest (connect Email/Slack here)", "type": "main", "index": 0 }
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          { "node": "Nothing To Report", "type": "main", "index": 0 }
+          {
+            "node": "Nothing To Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
   },
   "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate"
   },
-  "pinData": {}
+  "versionId": "195dd474-0b98-42ab-a959-ffe3183bf67e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f1a813b2fe4690ad798f313bc29417545c7cd20a61d32de1cb05277289e63ed7"
+  },
+  "id": "cCmEfzcyAXffgDCP",
+  "tags": []
 }
