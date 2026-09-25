@@ -63,3 +63,34 @@ def build_material_review_prompt(task, topic, curriculum_requirements, quality_c
         curriculum_requirements=curriculum_requirements,
         quality_checklist=quality_checklist,
     )
+
+
+# Used when LLM_PROVIDER is set. The model is NOT asked to write an
+# answer — only to choose which verified record (if any) answers the
+# question. The answer text shown to the student is then the chosen
+# record copied verbatim from the database, so the model has no way to
+# add a fact that isn't in data/seed.py. See agent.py::_llm_select.
+SELECTION_TEMPLATE = """You are a strict classifier for a university regulations assistant.
+
+A student asked the QUESTION below. CANDIDATES are verified records from the
+university's regulation database. Decide which ONE candidate directly answers
+the question.
+
+RULES:
+- Reply with the candidate number only (for example: 2), or the word NONE.
+- Reply NONE if no candidate directly answers the question, if the question is
+  about something the candidates do not cover, or if you are unsure.
+- A candidate on the same general topic that does not answer the specific
+  question is NOT a match. Reply NONE.
+- Do not explain. Do not answer the question yourself.
+
+QUESTION:
+{question}
+
+CANDIDATES:
+{candidates}
+"""
+
+
+def build_selection_prompt(question, candidates_text):
+    return SELECTION_TEMPLATE.format(question=question, candidates=candidates_text)

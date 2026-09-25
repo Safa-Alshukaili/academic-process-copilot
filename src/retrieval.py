@@ -35,24 +35,7 @@ sys.path.append(os.path.dirname(__file__))
 from rank_bm25 import BM25Okapi
 from db import get_conn, get_process_steps, get_forms
 
-STOPWORDS_EN = {
-    "how", "many", "what", "when", "where", "does", "do", "the", "for",
-    "before", "applying", "apply", "need", "with", "from", "have", "this",
-    "that", "your", "you", "can", "will", "into", "after", "about", "is",
-    "are", "a", "an", "of", "to", "in", "on", "my", "me", "i",
-}
-
-# Common Arabic function words / interrogatives that carry no topical
-# signal — the Arabic-language equivalent of STOPWORDS_EN above, so
-# retrieval quality doesn't quietly degrade for Arabic queries just
-# because nobody bothered to filter "هل", "كم", "من" the way "what",
-# "how", "who" are filtered for English.
-STOPWORDS_AR = {
-    "هل", "كم", "متى", "اي", "أي", "ما", "ماذا", "من", "الى", "إلى", "في",
-    "على", "عن", "مع", "او", "أو", "ثم", "قد", "لا", "ال", "هذا", "هذه",
-    "ذلك", "التي", "الذي", "بعد", "قبل", "انا", "أنا", "انت", "أنت",
-    "احتاج", "أحتاج", "اقدر", "أقدر", "لازم", "يجب", "كيف",
-}
+from text_normalize import tokens as _normalized_tokens
 
 ARABIC_RANGE = r"\u0600-\u06FF"
 
@@ -67,13 +50,10 @@ def detect_language(text):
 
 
 def _tokenize(text, lang):
-    if lang == "ar":
-        words = re.findall(f"[{ARABIC_RANGE}]+", text)
-        stopwords = STOPWORDS_AR
-    else:
-        words = re.findall(r"[a-z0-9]+(?:\.\d+)?", text.lower())
-        stopwords = STOPWORDS_EN
-    return [w for w in words if w not in stopwords and len(w) > 1]
+    """Normalization, light stemming, stopwords and the domain synonym
+    table all live in text_normalize.py, applied identically to queries
+    and documents."""
+    return _normalized_tokens(text, lang)
 
 
 def _load_documents(lang):
@@ -98,7 +78,9 @@ def _load_documents(lang):
             # yet — correctly invisible to Arabic queries rather than
             # surfacing None/blank text or crashing the renderer.
             continue
-        text = f"{r[q_col]} {r[a_col]}"
+        # The question is what a student's wording resembles most, so it
+        # counts twice; the answer still contributes (numbers, terms).
+        text = f"{r[q_col]} {r[q_col]} {r[a_col]}"
         docs.append(("faq", r["id"], text, r))
 
     cur.execute("SELECT * FROM processes")
@@ -164,3 +146,49 @@ def retrieve(query, language=None, top_k=5, min_score=0.1, min_shared_terms=2):
             seen_process_ids.add(doc_id)
 
     return processes, faqs, language
+
+
+def retrieve_scored(query, language=None):
+    """Scores every document and returns, for each one, the signals the
+    confidence gate in agent.py needs — not just a rank:
+
+      score     BM25 relevance
+      shared    distinct query terms also present in the document
+      coverage  shared / all distinct query terms (terms that appear
+                nowhere in the data still count in the denominator, so
+                "library late fee" can't look fully covered)
+      anchor_ok the query's most specific known term (highest IDF, i.e.
+                appearing in the fewest documents) is in this document
+
+    Returns (candidates sorted by score, language, query_terms)."""
+    import math
+
+    language = language or detect_language(query)
+    docs = _load_documents(language)
+    query_terms = set(_tokenize(query, language))
+    if not docs or not query_terms:
+        return [], language, query_terms
+
+    corpus = [_tokenize(text, language) for (_, _, text, _) in docs]
+    doc_sets = [set(d) for d in corpus]
+    bm25 = BM25Okapi(corpus)
+    scores = bm25.get_scores(list(query_terms))
+
+    df = {t: sum(1 for d in doc_sets if t in d) for t in query_terms}
+    known = [t for t in query_terms if df[t] > 0]
+    anchor = min(known, key=lambda t: (df[t], t)) if known else None
+
+    out = []
+    for score, (doc_type, doc_id, _, record), terms in zip(scores, docs, doc_sets):
+        shared = query_terms & terms
+        out.append({
+            "type": doc_type,
+            "id": doc_id,
+            "record": record,
+            "score": float(score),
+            "shared": len(shared),
+            "coverage": len(shared) / len(query_terms),
+            "anchor_ok": anchor is not None and anchor in terms,
+        })
+    out.sort(key=lambda c: c["score"], reverse=True)
+    return out, language, query_terms

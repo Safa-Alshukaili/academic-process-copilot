@@ -190,7 +190,7 @@
     },
     {
       "parameters": {
-        "jsCode": "build_email_body.js"
+        "jsCode": "const data = $input.first().json;\nconst esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));\nconst cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);\n\n// الموضوع: السؤال الأكثر تكرارًا + عدد المجموعات الباقية\nconst top = data.groups[0];\nconst more = data.count > 1 ? ` (+${data.count - 1} أخرى)` : '';\nconst subject = `أسئلة بلا جواب: \"${cut(top.representative, 50)}\" ×${top.total_asked}${more}`;\n\nconst rows = data.groups.map((g, i) => `\n  <tr>\n    <td style=\"text-align:center\">${i + 1}</td>\n    <td dir=\"auto\"><b>${esc(g.representative)}</b>\n      ${g.variants.length > 1\n        ? '<br><small>صيغ مشابهة:<br>' + g.variants.slice(1).map(v => '• ' + esc(v)).join('<br>') + '</small>'\n        : ''}\n    </td>\n    <td style=\"text-align:center\">${g.total_asked}</td>\n    <td>${esc(g.last_asked)}</td>\n  </tr>`).join('');\n\nconst html = `\n<div dir=\"rtl\" style=\"font-family:Arial,sans-serif\">\n  <h2>أسئلة الطلاب التي لم يجد لها المساعد جوابًا</h2>\n  <p>عدد المجموعات: <b>${data.count}</b>، مرتبة من الأكثر تكرارًا.\n     كل مجموعة تضم الأسئلة المتكررة أو المتشابهة في الصياغة.</p>\n  <table border=\"1\" cellpadding=\"8\" style=\"border-collapse:collapse\">\n    <tr style=\"background:#f0f0f0\">\n      <th>#</th><th>السؤال (وصيغه المشابهة)</th><th>مرات السؤال</th><th>آخر مرة</th>\n    </tr>\n    ${rows}\n  </table>\n  <p style=\"color:#666\">لإضافة جواب موثّق: <code>src/add_faq.py</code> أو <code>data/seed.py</code></p>\n</div>`;\n\nreturn [{ json: { subject, html } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -203,10 +203,10 @@
     },
     {
       "parameters": {
-        "fromEmail": "mohammedsafa500@gmail.com",
-        "toEmail": "mohammedsafa500@gmail.com",
-        "subject": "={{ $json.subject }}",
-        "html": "={{ $json.html }}",
+        "fromEmail": "your-email@example.com",
+        "toEmail": "your-email@example.com",
+        "subject": "=  {{ $json.subject }}",
+        "html": "=  {{ $json.html }}",
         "options": {}
       },
       "type": "n8n-nodes-base.emailSend",
@@ -215,9 +215,15 @@
         592,
         896
       ],
-      "id": "0169b752-8c3d-4884-9f65-8c6377a304df",
+      "id": "b66daa31-f75f-4594-83fa-52388c92be72",
       "name": "Send an Email",
-      "webhookId": "186da7cf-1a58-4e37-bb01-3269fb4209c0"
+      "webhookId": "6104e212-7a0e-4d94-a375-652b007a4f06",
+      "credentials": {
+        "smtp": {
+          "id": "cqyA2goXwrvn8xc2",
+          "name": "SMTP account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -330,7 +336,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "195dd474-0b98-42ab-a959-ffe3183bf67e",
+  "versionId": "4037073a-7bea-4f39-b965-a8670989f974",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "f1a813b2fe4690ad798f313bc29417545c7cd20a61d32de1cb05277289e63ed7"

@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 .env
+
+# Built by data/seed.py (CI and Docker rebuild it). Committing it also
+# commits the local audit_log, i.e. every test question asked.
+data/*.db

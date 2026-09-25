@@ -6,8 +6,10 @@ AI-assisted output this system produces. The automated checks in
 
 ## 1. Process-guidance answers (the student-facing agent)
 
-1. **Draft**: agent retrieves verified DB rows and generates an answer using
-   the structured prompt in `src/prompts/templates.py`.
+1. **Draft**: the agent selects one verified DB record through the
+   confidence gate in `src/agent.py::route_question` (optionally confirmed
+   by an LLM that may only pick a record number or NONE) and shows it
+   verbatim, with the matched question. No answer text is generated.
 2. **Automated check**: `qa_review.review_process_guidance()` verifies the
    answer is grounded in retrieved context and ends with a "Verify with:
    <office>" line.
@@ -15,7 +17,7 @@ AI-assisted output this system produces. The automated checks in
    is pre-verified (see `last_verified_date` / `verified_by` columns), a
    passing automated check is sufficient for direct answers to students.
 4. **Escalation**: if the automated check fails, or no matching context is
-   found, the agent tells the student to contact the responsible office
+   found, or the confidence gate refuses, the agent tells the student to contact the responsible office
    directly rather than guessing. Every escalation is logged (`src/audit_log.py`)
    with the exact question text.
 5. **Closing the loop**: `GET /admin/unanswered` groups logged failures by

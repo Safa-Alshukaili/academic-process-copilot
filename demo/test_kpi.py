@@ -19,6 +19,12 @@ def setup_temp_db():
     shutil.copy(real_db, tmp_db)
     import db
     db.DB_PATH = tmp_db
+    # Start from an empty audit log: the real database may already hold
+    # rows from other tests or local use, which would change the counts.
+    conn = db.get_conn()
+    conn.execute("DELETE FROM audit_log")
+    conn.commit()
+    conn.close()
     return tmp_dir
 
 

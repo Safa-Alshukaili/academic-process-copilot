@@ -14,15 +14,15 @@ files are the evidence for the no-code half specifically.
 | File | Trigger | Purpose |
 |---|---|---|
 | `apc-student-inquiry.n8n.json` | Webhook (one call per student question) | Answers the question, or escalates instead of guessing |
-| `apc-daily-digest.n8n.json` | Schedule (once a day) | Batches unanswered questions into one summary instead of one alert per failure |
+| `apc-daily-digest.n8n.json` | Schedule (default every 2 days) | Emails staff one summary of repeated unanswered questions, similar phrasings merged |
 
 **The trade-off that led to two files instead of one:** wiring a real
 email/Slack send directly into the first workflow's "Notify Staff" node
 means one notification per failed question — noisy if the same gap gets
 asked several times in a day, and easy to start ignoring. The second
-workflow calls `GET /admin/unanswered` (already grouped by question, most-
-asked first) once a day and only sends anything if there's something new
-to report. That's the recommended path; the first workflow's "Notify
+workflow calls `GET /admin/unanswered/grouped` (similar phrasings merged,
+most-asked first, one-off questions filtered out) on a schedule and only
+sends anything if there's something to report. That's the recommended path; the first workflow's "Notify
 Staff" node is left as a No-Op on purpose, with a note explaining why,
 rather than wired to send per-question by default.
 
@@ -43,9 +43,10 @@ If the agent can't ground an answer in verified data, this workflow does
 
 ```
 Schedule (default: every 2 days at 8am — adjustable)
-   → HTTP Request (calls GET /admin/unanswered)
+   → HTTP Request (calls GET /admin/unanswered/grouped)
    → IF: count > 0?
-        ├─ Yes → Send Digest (placeholder — one email/Slack message listing all gaps)
+        ├─ Yes → Code (build_email_body.js: subject + Arabic HTML table)
+        │        → Send Email (SMTP)
         └─ No  → Nothing To Report (silent — no "zero gaps" email every check)
 ```
 
@@ -72,10 +73,10 @@ right now" — worth being upfront about in an interview if asked.
 Both JSON files were built by hand to match n8n's workflow schema.
 `apc-student-inquiry.n8n.json` **has been imported and executed in a real
 n8n instance** and confirmed working end to end (both the answered and
-escalated paths). `apc-daily-digest.n8n.json` has **not** been executed
-live yet — it follows the same node patterns that already worked in the
-first file, but import and test it yourself before treating it as proven,
-the same way the first one was tested here.
+escalated paths). `apc-daily-digest.n8n.json` **has also been executed live**, sending a
+real email through Gmail SMTP (see `docs/screenshots/10-email-digest.png`).
+The recipient/sender address in the committed file is a placeholder
+(`your-email@example.com`) — set your own after importing.
 
 ## How to run workflow 1 yourself
 
@@ -117,15 +118,24 @@ API is running, click **Execute Workflow** to run it once immediately
 there are unanswered questions logged, and `Nothing To Report` when there
 aren't.
 
-## Wiring up real notifications
+## Setting up the email (digest workflow)
 
-For either workflow: in n8n, delete the No-Op placeholder node and drag in
-a **Gmail** node (or Outlook, or Slack) in its place, connected the same
-way. Add your own credentials (n8n → Credentials → New — stored locally,
-nothing shared with this repo). For the digest workflow specifically, the
-message body should list `$json.questions` (each has `question`,
-`times_asked`, `last_asked`) rather than a single question. Save, then
-re-run the test above to confirm you actually receive it.
+The Send Email node needs an SMTP credential, which is **not** in the JSON
+file (n8n exports only the credential's name). With Gmail:
+
+1. Turn on 2-Step Verification for the Google account, then create an
+   **App Password** (Google Account → search "App passwords").
+2. In the Send Email node: Credential → Create new → SMTP:
+   host `smtp.gmail.com`, port `465`, SSL/TLS on, user = the Gmail
+   address, password = the 16-character App Password.
+3. From Email = the same Gmail address; To Email = where the digest
+   should go. Subject = `{{ $json.subject }}` and HTML =
+   `{{ $json.html }}`, both in **Expression** mode, Email Format = HTML.
+
+Never put the App Password in any file in this repository.
+
+Workflow 1's "Notify Staff" node stays a No-Op on purpose (see the
+trade-off above): the digest is the notification path.
 
 ## Closing the loop
 
@@ -136,8 +146,7 @@ audit history. See "Closing the loop" in `docs/QA_PROCESS.md`.
 
 ## What a real deployment would add
 
-- Replace both placeholder notification nodes with real Gmail/Outlook/Slack
-  nodes using real credentials.
+- An institutional mail account (or Slack/Teams) instead of a personal Gmail.
 - Point the HTTP Request nodes at a deployed API URL instead of `localhost`.
 - A lightweight admin UI over `add_faq.py` so non-technical staff can
   close gaps without touching the command line.

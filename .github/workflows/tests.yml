@@ -28,5 +28,13 @@ jobs:
         run: python demo/test_kpi.py
       - name: Run bilingual tests
         run: python demo/test_bilingual.py
+      - name: Run question-understanding tests
+        run: python demo/test_understanding.py
+      - name: Run LLM-selection tests (stubbed model, no API key)
+        run: python demo/test_llm_selection.py
+      - name: Run gap-grouping tests
+        run: python demo/test_gap_grouping.py
+      - name: Retrieval evaluation (held-out regression floors)
+        run: python demo/eval_retrieval.py --ci
       - name: Run agent smoke test
         run: python demo/demo.py

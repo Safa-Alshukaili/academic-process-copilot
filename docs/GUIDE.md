@@ -195,6 +195,10 @@ python demo/test_audit_and_freshness.py
 python demo/test_add_faq.py            # the "closing the loop" flow
 python demo/test_kpi.py
 python demo/test_bilingual.py          # Arabic/English correctness, incl. a real bug fix
+python demo/test_understanding.py      # paraphrase understanding + refusal cases
+python demo/test_llm_selection.py      # LLM may only choose a record, never write text
+python demo/test_gap_grouping.py       # similar unanswered questions merged
+python demo/eval_retrieval.py          # accuracy / refusal numbers on labeled questions
 python demo/demo.py                    # smoke test
 ```
 
@@ -217,6 +221,7 @@ Endpoints:
 | `GET /health` | Liveness + rolling QA failure rate |
 | `GET /admin/freshness` | FAQ rows not re-verified in 180 days |
 | `GET /admin/unanswered` | Failed questions, grouped by frequency |
+| `GET /admin/unanswered/grouped` | Same queue, similar phrasings merged (used by the email digest) |
 | `GET /admin/kpi` | One aggregated system-health view |
 
 ### Running with Docker
@@ -246,47 +251,61 @@ curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \
 
 Both return the same JSON shape: `{"answer": "...", "prompt_used": "...", "qa_passed": true}`.
 
-### Using a real LLM instead of the offline fallback
+### Using a real LLM (optional)
 
-By default the agent runs with **no external API calls** — a deterministic
-template fallback formats the retrieved data directly, which keeps every
-demo free and predictable. To route through Claude instead:
+By default the agent runs with **no external API calls**. To add Claude:
 
 ```bash
 export LLM_PROVIDER=anthropic
 export ANTHROPIC_API_KEY=sk-...
 ```
 
-The offline mode is not a lesser mode — it's what makes the grounding
-guarantee absolute for the CLI/free demo path, since it only ever echoes
-retrieved text. The real-LLM path is where `check_grounding()` actually
-does work, catching paraphrase drift a template can't produce.
+The model is **not** allowed to write the answer. It receives the question
+and up to three records that already passed the confidence gate, and must
+reply with a record number or `NONE` (`prompts/templates.py::SELECTION_TEMPLATE`).
+The student then sees that record copied verbatim from the database. Any
+other reply — an explanation, an attempted answer, a number out of range —
+is treated as `NONE` and the question is logged as a gap
+(`demo/test_llm_selection.py` checks all of these with a stubbed model).
+So with or without an LLM, every sentence a student reads comes from
+`data/seed.py`. What the LLM adds is a second, stricter judgment of
+*which* record answers the question — it can reject a candidate the
+lexical gate let through.
 
 ## 5. The RAG pipeline, step by step
 
 1. **Language detection** (`retrieval.py::detect_language`) — Arabic
    Unicode range present → Arabic; otherwise English.
-2. **Retrieval** (`retrieval.py::retrieve`) — BM25 over FAQs and processes,
-   scored *only* against that language's text columns. A document must
-   share at least 2 distinct query terms to be considered — this exact
-   guard was added after a real bug: a single rare shared word ("fee")
-   made an unrelated process score highly for a completely unrelated
-   question.
-3. **Process narrowing** — if the top FAQ names a `process_id`, that
+2. **Normalization** (`text_normalize.py`) — applied identically to the
+   question and to every document: Arabic orthography (hamza forms, ة/ه,
+   ى/ي, diacritics, punctuation), light stemming (ال/و/ب prefixes, ات/ين/ـه
+   suffixes; -s/-ed/-ing in English), article citations removed, and a
+   small hand-written synonym table mapping same-meaning words to one
+   concept ("postpone"/"defer", "الحرمان"/"أُحرم"/"انحرم", "مادة"/"مقرر").
+3. **Scoring** (`retrieval.py::retrieve_scored`) — BM25 over FAQs and
+   processes in that language only. FAQ questions count twice, since a
+   student's wording resembles the question more than the answer. For
+   each document it also reports how many of the question's terms it
+   shares and what fraction (coverage) — terms that exist nowhere in the
+   data still count against coverage.
+4. **Confidence gate** (`agent.py::route_question`) — a record may answer
+   only if it shares ≥2 terms and covers ≥60% of the question's terms.
+   Otherwise the agent refuses and logs the question as a gap. The
+   thresholds were tuned on `demo/eval_questions.py::DEV` only.
+5. **Process narrowing** — if the chosen FAQ names a `process_id`, that
    process is fetched **directly by id** (`db.py::get_process`) rather
    than only filtered from the initial candidates. This fixes a second
    real bug: the correct process could be identified via the FAQ even
    when it didn't itself score into the top-k BM25 results.
-4. **Prompt construction** (`prompts/templates.py`) — a fixed role,
-   the retrieved context, explicit output-format rules, and a language
-   instruction. Not a free-form "answer this" prompt.
-5. **Generation** — either a real LLM call or the offline template
-   fallback, both producing the same OUTPUT FORMAT contract.
-6. **Grounding check** (`qa_review.py::check_grounding`) — extracts every
+6. **Rendering** — the chosen record is shown verbatim, prefixed with the
+   matched question ("Closest verified question: …") so the student can
+   see what was understood, followed by the process steps/forms, the
+   other questions in the same process, and a "Verify with" line.
+7. **Grounding check** (`qa_review.py::check_grounding`) — extracts every
    number and article citation in the answer and verifies each one
    actually appears in the retrieved context. Catches both English
    ("Article 46") and Arabic ("المادة 46") citation formats.
-7. **Logging** (`audit_log.py`) — the question, what matched, and the QA
+8. **Logging** (`audit_log.py`) — the question, what matched, and the QA
    verdict are logged (never the generated answer or any PII).
 
 ## 6. Closing the loop: what happens when the agent doesn't know
@@ -352,10 +371,15 @@ published without a human sign-off step — see
 
 ## 10. Known limitations (stated, not hidden)
 
-- Retrieval is sparse (BM25), not semantic — a query that shares real
-  terms with an unrelated FAQ can still retrieve the wrong thing; the
-  grounding check catches invented *facts*, not misretrieved-but-
-  internally-consistent ones. See "Honest limitations" in the README.
+- Understanding is lexical plus a curated synonym table, not semantic.
+  On the held-out question set (22 in-scope, 12 out-of-scope, written by
+  the author before tuning): 19/22 answered from exactly the right FAQ,
+  0/22 from an unrelated topic, 2/22 refused although answerable, and
+  2/12 out-of-scope questions answered when they should have been
+  refused. The most common error is picking a *sibling* FAQ in the right
+  process ("how many withdrawals" vs "withdrawal deadline"); the listed
+  related questions make that recoverable, not invisible. See
+  `demo/eval_retrieval.py`.
 - No admin UI — data is edited via script (`add_faq.py`), not a form.
 - The API has no authentication layer.
 - `src/materials.py` (academic material drafting) and the published
@@ -371,8 +395,10 @@ academic-process-copilot/
 ├── data/seed.py              # builds the database from real regulation data
 ├── src/
 │   ├── db.py                 # connection + row-level lookups
-│   ├── retrieval.py          # BM25, bilingual retrieval
-│   ├── agent.py              # orchestrates retrieve → prompt → generate → QA
+│   ├── text_normalize.py     # Arabic/English normalization, stemming, synonym table
+│   ├── retrieval.py          # BM25 scoring, bilingual, coverage signals
+│   ├── gap_grouping.py       # merges similar unanswered questions
+│   ├── agent.py              # confidence gate → verbatim answer → QA → log
 │   ├── materials.py          # academic-material drafting flow
 │   ├── qa_review.py          # QA checks, incl. grounding/anti-hallucination
 │   ├── security.py           # prompt-injection stripping, PII redaction, RBAC stub
