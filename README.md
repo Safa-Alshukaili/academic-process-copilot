@@ -46,7 +46,7 @@ for the full-resolution files.
 **Automated tests passing** (`demo/test_qa_review.py`), including the case
 designed to fail (a missing checklist item) actually failing:
 
-![QA tests passing](./docs/screenshots/04-api-health-endpoint.png)
+![QA tests passing](./docs/screenshots/01-qa-tests-passing.png)
 
 **The n8n automation layer correctly escalating** a question outside the
 data ("what is the weather today") instead of guessing:
@@ -56,48 +56,51 @@ data ("what is the weather today") instead of guessing:
 **Both n8n flows executed successfully in one run** — student inquiry
 (top) and the unanswered-questions digest (bottom), every node green:
 
-![n8n full workflow success](./docs/screenshots/01-qa-tests-passing.png)
+![n8n full workflow success](./docs/screenshots/03-n8n-full-workflow-success.png)
 
 **The API's health endpoint**, live:
 
-![API health endpoint](./docs/screenshots/07-n8n-escalation-library-fee.png)
+![API health endpoint](./docs/screenshots/04-api-health-endpoint.png)
 
 **n8n workflow 1 (Webhook: student inquiry) — the actual canvas:**
 
-![n8n workflow 1 canvas](./docs/screenshots/01-qa-tests-passing.png)
+![n8n workflow 1 canvas](./docs/screenshots/08-n8n-workflow1-canvas.png)
 
 **n8n workflow 2 (scheduled digest) — the actual canvas:**
 
-![n8n workflow 2 canvas](./docs/screenshots/08-n8n-workflow1-canvas.png)
-
-**A correctly answered question**, via the live n8n webhook:
-
-![n8n answered — academic probation](./docs/screenshots/03-n8n-full-workflow-success.png)
+![n8n workflow 2 canvas](./docs/screenshots/09-n8n-workflow2-canvas.png)
 
 **A correctly escalated question** (outside the data, no guess made):
 
-![n8n escalated — library fee](./docs/screenshots/02-n8n-escalation-response.png)
+![n8n escalated — library fee](./docs/screenshots/07-n8n-escalation-library-fee.png)
+
+**Similar unanswered questions grouped and emailed to staff automatically**
+(`GET /admin/unanswered/grouped` → n8n digest → email), so each gap is
+reported once with all its phrasings, not once per wording:
+
+![Email digest of grouped unanswered questions](./docs/screenshots/10-email-digest.png)
 
 ## Quick start
 
-\`\`\`bash
+```bash
 pip install -r requirements.txt   # rank_bm25 for retrieval, fastapi/uvicorn for the API
 python data/seed.py               # builds data/institutional_processes.db
 python demo/demo.py               # runs both flows end to end (CLI)
 python demo/test_qa_review.py     # QA layer tests, including failure cases
 python demo/test_bilingual.py     # Arabic + English retrieval/generation tests
+python demo/test_gap_grouping.py  # grouping of similar unanswered questions
 uvicorn src.api:app --reload      # runs the API — open http://127.0.0.1:8000/docs
-\`\`\`
+```
 
 Try it in either language via the API:
 
-\`\`\`bash
-curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \\
+```bash
+curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \
   -d '{"question": "What GPA puts me on academic probation?"}'
 
-curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \\
+curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" \
   -d '{"question": "أي معدل يخليني تحت الملاحظة الأكاديمية؟"}'
-\`\`\`
+```
 
 Or with Docker: `docker build -t apc . && docker run -p 8000:8000 apc`
 
@@ -114,7 +117,7 @@ Every push to `main` runs the test suite automatically via GitHub Actions
 |---|---|
 | Develop, organize and maintain structured academic resources in line with curriculum frameworks and quality standards | `src/materials.py`, `src/prompts/templates.py::MATERIAL_REVIEW_TEMPLATE` (curriculum requirements + quality checklist are explicit inputs) |
 | Apply AI-assisted tools and structured prompts to develop, refine and review academic materials within agreed guidelines | `src/materials.py::draft_and_review()`, `src/prompts/templates.py` |
-| Support academic teams in consistent review, verification and quality assurance processes | `src/qa_review.py`, `docs/QA_PROCESS.md`, `src/add_faq.py` + `GET /admin/unanswered` (closes the loop on gaps the QA layer finds), `GET /admin/kpi` (one aggregated health view: pass rate, top gaps, stale-data count, coverage) |
+| Support academic teams in consistent review, verification and quality assurance processes | `src/qa_review.py`, `docs/QA_PROCESS.md`, `src/add_faq.py` + `GET /admin/unanswered` (closes the loop on gaps the QA layer finds), `GET /admin/unanswered/grouped` + `src/gap_grouping.py` (similar phrasings of one gap merged and emailed to staff), `GET /admin/kpi` (one aggregated health view: pass rate, top gaps, stale-data count, coverage) |
 | Build and maintain databases and repositories covering institutional stakeholders and academic operations | `data/seed.py` (schema + seed), `src/db.py` |
 | Design AI-assisted workflows and agents that reduce repetitive administrative work and guide users through forms and institutional processes | `src/agent.py::answer_question()`, Demo 1 in `demo/demo.py` |
 | Work with academic and administrative staff to identify where AI and digital tools can improve existing processes | `docs/PROCESS_IMPROVEMENT_ANALYSIS.md` |
@@ -123,7 +126,7 @@ Every push to `main` runs the test suite automatically via GitHub Actions
 | Sound understanding of structured prompting for information processing and workflow support | `src/prompts/templates.py` — fixed role, verified context, explicit output format and guardrails, not a free-form instruction; `src/retrieval.py` + `src/qa_review.py::check_grounding()` form a real RAG pipeline — retrieval and a tested anti-hallucination check, not just a prompt instruction (see "RAG design" below) |
 | Strong digital literacy across databases, spreadsheets and online platforms | SQLite schema design (`data/seed.py`), CLI tooling |
 | Minimum 2 years' experience; **or** strong graduate with demonstrable AI projects | This project is that evidence |
-| AI agents, workflow automation, or no-code/low-code platforms | `src/agent.py` (code-based agent) **and** `automation/apc-student-inquiry.n8n.json` — a real, importable n8n no-code workflow that orchestrates the API (see `automation/README.md`) |
+| AI agents, workflow automation, or no-code/low-code platforms | `src/agent.py` (code-based agent) **and** `automation/apc-student-inquiry.n8n.json` + `automation/apc-daily-digest.n8n.json` — real, importable n8n no-code workflows that orchestrate the API, including a scheduled email digest (see `automation/README.md`) |
 | Database design and data management | `data/seed.py` schema (5 normalized tables, foreign keys, seed data) |
 | University, educational environment | Domain of the whole project |
 | Quality assurance and structured documentation processes | `docs/QA_PROCESS.md`, `src/qa_review.py`, tests in `demo/test_qa_review.py` |
@@ -131,7 +134,7 @@ Every push to `main` runs the test suite automatically via GitHub Actions
 
 ## Architecture
 
-\`\`\`mermaid
+```mermaid
 flowchart LR
     Student([Student asks a question<br/>English or Arabic]) --> Detect[Detect language<br/>retrieval.py]
     Detect --> Retrieve[BM25 retrieval<br/>scored in that language only]
@@ -145,9 +148,9 @@ flowchart LR
     Ground -->|unsupported claim<br/>found| Fail[QA fails — logged,<br/>surfaced as a gap]
     Pass --> Audit[(audit_log)]
     Fail --> Audit
-\`\`\`
+```
 
-\`\`\`
+```
 data/seed.py        → builds institutional_processes.db from the real
                        UTAS Academic Regulation (processes, steps, FAQs,
                        each citing a specific article)
@@ -169,12 +172,15 @@ src/qa_review.py      → automated QA checks, including check_grounding()
                         answer actually appears in the retrieved context
 src/security.py       → prompt-injection stripping, PII redaction, RBAC stub
 src/audit_log.py      → logs every question + match + QA outcome (no PII, no answer text)
+src/gap_grouping.py   → merges similar phrasings of the same unanswered
+                        question (Arabic + English normalization) so staff
+                        see one gap, not ten wordings of it
 src/freshness_check.py→ flags FAQ rows not re-verified within 180 days
 src/add_faq.py         → adds one verified FAQ without wiping the database
                         or audit history — how staff close a gap
 src/api.py            → FastAPI service (POST /ask, POST /materials/draft,
                         GET /health, GET /admin/freshness, GET /admin/unanswered,
-                        GET /admin/kpi)
+                        GET /admin/unanswered/grouped, GET /admin/kpi)
                         — auto-documented at /docs
 Dockerfile             → containerized deployment
 .github/workflows/     → CI: installs requirements.txt, then runs the full
@@ -184,7 +190,7 @@ demo/test_qa_review.py→ QA tests, including a simulated hallucination
                         (an invented number/article) that must be caught
 docs/                 → QA process, responsible-AI/security policy,
                         process-improvement analysis
-\`\`\`
+```
 
 ## RAG design: why this counts as "grounded," not just "has an LLM call"
 
@@ -230,20 +236,25 @@ drifts from the source.
 Two real, importable n8n workflows in `automation/` — not just a
 description of one. `apc-student-inquiry.n8n.json` calls this API's
 `/ask` endpoint per question and escalates instead of guessing;
-`apc-daily-digest.n8n.json` batches unanswered questions into one daily
-summary instead of one alert per failure. See `automation/README.md` for
-what each does, how to run them, and why there are two instead of one.
+`apc-daily-digest.n8n.json` calls `/admin/unanswered/grouped` on a
+schedule and emails staff one summary of the unanswered questions that
+were asked repeatedly — similar phrasings merged into one row — instead
+of one alert per failure. It stays silent on days with nothing new. The
+email body is built by the Code node in `automation/build_email_body.js`;
+sending requires an SMTP credential added in n8n after import (never
+stored in the workflow file). See `automation/README.md` for what each
+workflow does, how to run them, and why there are two instead of one.
 
 ## Bilingual design: Arabic and English, not translation-after-the-fact
 
-\`\`\`mermaid
+```mermaid
 flowchart TD
     Q[Question] --> D{Contains Arabic<br/>script?}
     D -->|yes| ArIndex[Score against<br/>question_ar / answer_ar only]
     D -->|no| EnIndex[Score against<br/>question / answer only]
     ArIndex --> ArAnswer[Render answer in Arabic:<br/>تحقق مع, العملية, الخطوات]
     EnIndex --> EnAnswer[Render answer in English:<br/>Verify with, Process, Steps]
-\`\`\`
+```
 
 A student can ask in either language and gets an answer in that same
 language — but this isn't a translation layer bolted on at the end.
@@ -298,7 +309,12 @@ than showing a blank or English-only answer to an Arabic query.
   a better prompt.
 
   Screenshot of this exact case happening live, via the n8n workflow:
-  ![n8n — OJT retrieval limitation in action](docs/screenshots/03-n8n-full-workflow-success.png)
+  ![n8n — OJT retrieval limitation in action](docs/screenshots/06-n8n-ojt-retrieval-limitation.png)
+- Grouping of unanswered questions (`src/gap_grouping.py`) is lexical —
+  shared words after Arabic/English normalization — not semantic. Two
+  phrasings of the same gap with no words in common ("library late fee"
+  vs "overdue book penalty") are reported as separate rows. The email
+  digest only runs while n8n and the API are both running.
 - No admin UI yet — data is edited via script, not a form; `GET
   /admin/freshness` surfaces what needs re-verification, but re-verifying
   is still a manual step.
