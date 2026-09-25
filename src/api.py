@@ -19,6 +19,7 @@ from agent import answer_question
 from materials import draft_and_review
 from freshness_check import check as freshness_check
 from audit_log import failure_rate, unanswered_questions, kpi_summary
+from gap_grouping import group_questions
 
 app = FastAPI(
     title="Academic Process Copilot API",
@@ -90,6 +91,17 @@ def unanswered():
     what add_faq.py closes — see 'Closing the loop' in the main README."""
     rows = unanswered_questions()
     return {"count": len(rows), "questions": rows}
+
+
+@app.get("/admin/unanswered/grouped")
+def unanswered_grouped(threshold: float = 0.6, min_total: int = 2):
+    """Same work queue as /admin/unanswered, but similar phrasings of one
+    gap are merged into a single group (lexical similarity, Arabic and
+    English normalized — see src/gap_grouping.py). Only groups asked at
+    least `min_total` times are returned, so one-off questions don't
+    trigger the email digest. This is what apc-daily-digest.n8n.json calls."""
+    groups = group_questions(unanswered_questions(), threshold, min_total)
+    return {"count": len(groups), "groups": groups}
 
 
 @app.get("/admin/kpi")
